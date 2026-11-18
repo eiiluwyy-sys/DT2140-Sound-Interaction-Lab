@@ -64,7 +64,7 @@ let engineRunning = false;
 
 const flatAngleLimit = 20;
 const spinStartThreshold = 40;
-const spinStopThreshold = 20;
+const spinStopThreshold = 30;
 const fullSpeedAt = 240;
 
 function rotationChange(rotx, roty, rotz) {
@@ -77,7 +77,9 @@ function rotationChange(rotx, roty, rotz) {
         return;
     }
 
-    const isFlat = Math.abs(rotx) <= flatAngleLimit && Math.abs(roty) <= flatAngleLimit;
+    const xIsFlat = Math.abs(rotx) <= flatAngleLimit
+        || Math.abs(Math.abs(rotx) - 180) <= flatAngleLimit;
+    const isFlat = xIsFlat && Math.abs(roty) <= flatAngleLimit;
 
     if (!isFlat) {
         previousRotationZ = null;
@@ -103,7 +105,9 @@ function rotationChange(rotx, roty, rotz) {
     // Use the shortest angular distance so crossing 359 -> 0 degrees stays smooth.
     const angleDelta = ((rotz - previousRotationZ + 540) % 360) - 180;
     const spinSpeed = Math.min(Math.abs(angleDelta) / elapsedSeconds, 720);
-    smoothedSpinSpeed = 0.75 * smoothedSpinSpeed + 0.25 * spinSpeed;
+    // Follow falling speed more quickly so the engine stops promptly.
+    const smoothingFactor = spinSpeed < smoothedSpinSpeed ? 0.55 : 0.25;
+    smoothedSpinSpeed += smoothingFactor * (spinSpeed - smoothedSpinSpeed);
 
     // Hysteresis prevents sensor noise near the boundary from clicking the gate on and off.
     if (!engineRunning && smoothedSpinSpeed >= spinStartThreshold) {
