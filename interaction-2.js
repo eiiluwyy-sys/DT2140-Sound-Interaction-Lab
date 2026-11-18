@@ -60,9 +60,11 @@ let previousRotationZ = null;
 let previousRotationTime = null;
 let smoothedSpinSpeed = 0;
 let manualEngineUntil = 0;
+let engineRunning = false;
 
 const flatAngleLimit = 20;
-const spinDeadZone = 15;
+const spinStartThreshold = 40;
+const spinStopThreshold = 20;
 const fullSpeedAt = 240;
 
 function rotationChange(rotx, roty, rotz) {
@@ -81,6 +83,7 @@ function rotationChange(rotx, roty, rotz) {
         previousRotationZ = null;
         previousRotationTime = null;
         smoothedSpinSpeed = 0;
+        engineRunning = false;
         playAudio(0);
         return;
     }
@@ -102,11 +105,20 @@ function rotationChange(rotx, roty, rotz) {
     const spinSpeed = Math.min(Math.abs(angleDelta) / elapsedSeconds, 720);
     smoothedSpinSpeed = 0.75 * smoothedSpinSpeed + 0.25 * spinSpeed;
 
-    const activity = constrain(
-        (smoothedSpinSpeed - spinDeadZone) / (fullSpeedAt - spinDeadZone),
-        0,
-        1
-    );
+    // Hysteresis prevents sensor noise near the boundary from clicking the gate on and off.
+    if (!engineRunning && smoothedSpinSpeed >= spinStartThreshold) {
+        engineRunning = true;
+    } else if (engineRunning && smoothedSpinSpeed <= spinStopThreshold) {
+        engineRunning = false;
+    }
+
+    const activity = engineRunning
+        ? constrain(
+            (smoothedSpinSpeed - spinStopThreshold) / (fullSpeedAt - spinStopThreshold),
+            0,
+            1
+        )
+        : 0;
 
     if (activity > 0) {
         turntimer = now;
@@ -164,10 +176,14 @@ function playAudio(activity) {
         return;
     }
     const safeActivity = constrain(Number(activity) || 0, 0, 1);
-    const motorSpeed = safeActivity > 0 ? 0.15 + 0.85 * safeActivity : 0;
 
-    dspNode.setParamValue("/engine/maxSpeed", motorSpeed);
-    dspNode.setParamValue("/engine/gate", safeActivity > 0 ? 1 : 0);
+    if (safeActivity > 0) {
+        dspNode.setParamValue("/engine/maxSpeed", safeActivity);
+        dspNode.setParamValue("/engine/gate", 1);
+    } else {
+        // Keep the last speed while the DSP envelope fades out to avoid an abrupt click.
+        dspNode.setParamValue("/engine/gate", 0);
+    }
 }
 
 //==========================================================================================
