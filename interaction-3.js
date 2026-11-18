@@ -56,6 +56,21 @@ function accelerationChange(accx, accy, accz) {
 }
 
 function rotationChange(rotx, roty, rotz) {
+    if (!Number.isFinite(roty)) {
+        return;
+    }
+
+    // Treat a nearly level phone as silence. Tilting farther left or right
+    // increases the virtual player's breath pressure up to the Faust model's
+    // maximum value.
+    const deadZone = 5;
+    const fullPressureAngle = 45;
+    const tilt = Math.abs(roty);
+    const pressure = tilt <= deadZone
+        ? 0
+        : Math.min(1, (tilt - deadZone) / (fullPressureAngle - deadZone));
+
+    playAudio(pressure);
 }
 
 function mousePressed() {
@@ -74,7 +89,6 @@ function deviceTurned() {
 function deviceShaken() {
     shaketimer = millis();
     statusLabels[0].style("color", "pink");
-    playAudio();
 }
 
 function getMinMaxParam(address) {
@@ -102,8 +116,10 @@ function playAudio(pressure) {
     if (audioContext.state === 'suspended') {
         return;
     }
-    console.log(pressure)
-    dspNode.setParamValue("/brass/blower/pressure", pressure)
+    const safePressure = Number.isFinite(pressure)
+        ? Math.max(0, Math.min(1, pressure))
+        : 0;
+    dspNode.setParamValue("/brass/blower/pressure", safePressure)
 }
 
 //==========================================================================================
