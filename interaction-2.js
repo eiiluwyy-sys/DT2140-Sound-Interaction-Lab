@@ -63,6 +63,8 @@ let manualEngineUntil = 0;
 let engineRunning = false;
 
 const flatAngleLimit = 20;
+const degreesToRadians = Math.PI / 180;
+const flatNormalLimit = Math.cos(flatAngleLimit * degreesToRadians);
 const spinStartThreshold = 40;
 const spinStopThreshold = 30;
 const fullSpeedAt = 240;
@@ -77,9 +79,11 @@ function rotationChange(rotx, roty, rotz) {
         return;
     }
 
-    const xIsFlat = Math.abs(rotx) <= flatAngleLimit
-        || Math.abs(Math.abs(rotx) - 180) <= flatAngleLimit;
-    const isFlat = xIsFlat && Math.abs(roty) <= flatAngleLimit;
+    // Use the screen normal instead of a specific Euler-angle combination.
+    // The absolute value accepts both screen-up and screen-down orientations.
+    const screenNormalZ = Math.cos(rotx * degreesToRadians)
+        * Math.cos(roty * degreesToRadians);
+    const isFlat = Math.abs(screenNormalZ) >= flatNormalLimit;
 
     if (!isFlat) {
         previousRotationZ = null;
