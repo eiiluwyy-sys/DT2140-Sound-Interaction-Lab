@@ -1,0 +1,75 @@
+DT2140 Lab 2: Sound and Gestures in Interaction
+
+1. COMPLETE NAME OF LAB PARTNER
+
+Jinye Gong
+
+WeiyiLyu
+
+
+2. GITHUB REPOSITORY
+
+https://github.com/eiiluwyy-sys/DT2140-Sound-Interaction-Lab
+
+
+3. CONNECTIONS BETWEEN GESTURAL ACTIONS AND SOUNDS
+
+--------------------------------------------------------------------------
+MAPPING 1
+--------------------------------------------------------------------------
+
+ACTION:
+Hold the phone upright and make a clear upward thrust.
+
+SOUND:
+A single sci-fi torpedo launch is triggered.
+
+ADDITIONAL DETAILS:
+The phone may deviate by about 25 degrees from vertical. The upward
+acceleration threshold is 3, the phone must first remain steady for 300 ms,
+and an 800 ms cooldown prevents repeated launches. /torpedo/trigger stays
+at 1 for 100 ms before returning to 0.
+
+
+--------------------------------------------------------------------------
+MAPPING 2
+--------------------------------------------------------------------------
+
+ACTION:
+Hold the phone flat and rotate it horizontally, with the screen facing
+either up or down.
+
+SOUND:
+A continuous engine sound becomes busier as the phone rotates faster.
+
+ADDITIONAL DETAILS:
+The phone may deviate by about 20 degrees from flat. It must remain nearly
+still for 300 ms before the control is armed. The engine starts at 40
+degrees/second, stops at 30 degrees/second, and reaches full activity at
+240 degrees/second. Rotation activity from 0 to 1 controls
+/engine/maxSpeed; /engine/volume remains fixed at 1.
+
+
+--------------------------------------------------------------------------
+MAPPING 3
+--------------------------------------------------------------------------
+
+ACTION:
+Tilt the phone left or right.
+
+SOUND:
+A brass sound becomes stronger as the tilt angle increases.
+
+ADDITIONAL DETAILS:
+Tilts from 0 to 5 degrees form a silent dead zone. From 5 to 45 degrees,
+the tilt is mapped linearly to /brass/blower/pressure from 0 to 1. At 45
+degrees or more, the pressure remains at its maximum value of 1.
+
+
+
+--------------------------------------------------------------------------
+Disclosure of AI use
+--------------------------------------------------------------------------
+
+AI is used in debugging syntax of interaction 2 and give us suggestion of improving the
+threshold of starting and stopping of the engine sound. 
