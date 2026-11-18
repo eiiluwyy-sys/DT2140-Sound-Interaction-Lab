@@ -59,8 +59,9 @@ function accelerationChange(accx, accy, accz) {
 let previousRotationZ = null;
 let previousRotationTime = null;
 let smoothedSpinSpeed = 0;
-let manualEngineUntil = 0;
 let engineRunning = false;
+let engineControlArmed = false;
+let engineSettleStart = null;
 
 const flatAngleLimit = 20;
 const degreesToRadians = Math.PI / 180;
@@ -68,14 +69,31 @@ const flatNormalLimit = Math.cos(flatAngleLimit * degreesToRadians);
 const spinStartThreshold = 40;
 const spinStopThreshold = 30;
 const fullSpeedAt = 240;
+const engineSettleMs = 300;
+
+function resetEngineMotionState() {
+    previousRotationZ = null;
+    previousRotationTime = null;
+    smoothedSpinSpeed = 0;
+    engineRunning = false;
+    engineControlArmed = false;
+    engineSettleStart = null;
+}
 
 function rotationChange(rotx, roty, rotz) {
     if (!Number.isFinite(rotx) || !Number.isFinite(roty) || !Number.isFinite(rotz)) {
+        resetEngineMotionState();
         return;
     }
 
     const now = millis();
-    if (now < manualEngineUntil) {
+    if (!dspNode) {
+        resetEngineMotionState();
+        return;
+    }
+    if (audioContext.state !== 'running') {
+        resetEngineMotionState();
+        playAudio(0);
         return;
     }
 
@@ -86,10 +104,7 @@ function rotationChange(rotx, roty, rotz) {
     const isFlat = Math.abs(screenNormalZ) >= flatNormalLimit;
 
     if (!isFlat) {
-        previousRotationZ = null;
-        previousRotationTime = null;
-        smoothedSpinSpeed = 0;
-        engineRunning = false;
+        resetEngineMotionState();
         playAudio(0);
         return;
     }
@@ -109,6 +124,25 @@ function rotationChange(rotx, roty, rotz) {
     // Use the shortest angular distance so crossing 359 -> 0 degrees stays smooth.
     const angleDelta = ((rotz - previousRotationZ + 540) % 360) - 180;
     const spinSpeed = Math.min(Math.abs(angleDelta) / elapsedSeconds, 720);
+
+    // Turning on the DSP never starts the engine. Arm it only after the phone
+    // has remained flat and nearly stationary for a short period.
+    if (!engineControlArmed) {
+        playAudio(0);
+        if (spinSpeed <= spinStopThreshold) {
+            if (engineSettleStart === null) {
+                engineSettleStart = now;
+            } else if (now - engineSettleStart >= engineSettleMs) {
+                engineControlArmed = true;
+            }
+        } else {
+            engineSettleStart = null;
+        }
+        previousRotationZ = rotz;
+        previousRotationTime = now;
+        return;
+    }
+
     // Follow falling speed more quickly so the engine stops promptly.
     const smoothingFactor = spinSpeed < smoothedSpinSpeed ? 0.55 : 0.25;
     smoothedSpinSpeed += smoothingFactor * (spinSpeed - smoothedSpinSpeed);
@@ -139,10 +173,7 @@ function rotationChange(rotx, roty, rotz) {
 }
 
 function mousePressed() {
-    manualEngineUntil = millis() + 2000;
-    playAudio(0.7);
-    setTimeout(() => playAudio(0), 2000);
-    // Use this for debugging from the desktop!
+    // Intentionally empty: clicking Turn On DSP must not start the engine.
 }
 
 function deviceMoved() {
@@ -180,10 +211,11 @@ function playAudio(activity) {
     if (!dspNode) {
         return;
     }
-    if (audioContext.state === 'suspended') {
+    const safeActivity = constrain(Number(activity) || 0, 0, 1);
+
+    if (safeActivity > 0 && audioContext.state !== 'running') {
         return;
     }
-    const safeActivity = constrain(Number(activity) || 0, 0, 1);
 
     if (safeActivity > 0) {
         dspNode.setParamValue("/engine/maxSpeed", safeActivity);
