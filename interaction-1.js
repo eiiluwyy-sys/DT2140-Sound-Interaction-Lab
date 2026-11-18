@@ -50,6 +50,8 @@ torpedo.createDSP(audioContext, 1024)
 //==========================================================================================
 
 let isLaunchOrientation = false;
+let launchRotationX = 0;
+let launchRotationY = 0;
 let launchArmed = false;
 let launchSettleStart = null;
 let lastLaunchTime = -Infinity;
@@ -58,6 +60,8 @@ const upwardAccelerationThreshold = 3;
 const settleAccelerationLimit = 1.5;
 const launchSettleMs = 300;
 const launchCooldownMs = 800;
+const degreesToRadians = Math.PI / 180;
+const launchVerticalLimit = Math.cos(25 * degreesToRadians);
 
 function accelerationChange(accx, accy, accz) {
     if (!Number.isFinite(accx) || !Number.isFinite(accy) || !Number.isFinite(accz)) {
@@ -75,10 +79,14 @@ function accelerationChange(accx, accy, accz) {
         return;
     }
 
-    const accelerationMagnitude = Math.hypot(accx, accy, accz);
+    const beta = launchRotationX * degreesToRadians;
+    const gamma = launchRotationY * degreesToRadians;
+    const upwardAcceleration = -Math.cos(beta) * Math.sin(gamma) * accx
+        + Math.sin(beta) * accy
+        + Math.cos(beta) * Math.cos(gamma) * accz;
 
     if (!launchArmed) {
-        if (accelerationMagnitude <= settleAccelerationLimit) {
+        if (Math.abs(upwardAcceleration) <= settleAccelerationLimit) {
             if (launchSettleStart === null) {
                 launchSettleStart = now;
             } else if (now - launchSettleStart >= launchSettleMs) {
@@ -90,8 +98,7 @@ function accelerationChange(accx, accy, accz) {
         return;
     }
 
-    // Device +Y points towards the top edge of a portrait phone.
-    if (accy >= upwardAccelerationThreshold
+    if (upwardAcceleration >= upwardAccelerationThreshold
         && now - lastLaunchTime >= launchCooldownMs) {
         lastLaunchTime = now;
         launchArmed = false;
@@ -108,8 +115,13 @@ function rotationChange(rotx, roty, rotz) {
         return;
     }
 
-    // Rotation only validates the launch pose; it does not trigger sound.
-    isLaunchOrientation = Math.abs(rotx - 90) <= 25 && Math.abs(roty) <= 30;
+    launchRotationX = rotx;
+    launchRotationY = roty;
+
+    // Rotation only validates that the phone's long axis is nearly vertical.
+    // Both +90 and -90 degree representations are accepted.
+    const verticalAxisComponent = Math.abs(Math.sin(rotx * degreesToRadians));
+    isLaunchOrientation = verticalAxisComponent >= launchVerticalLimit;
 }
 
 function mousePressed() {
