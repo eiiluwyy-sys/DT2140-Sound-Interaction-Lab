@@ -11,8 +11,7 @@ let dspNode = null;
 let dspNodeParams = null;
 let jsonParams = null;
 
-// Change here to ("tuono") depending on your wasm file name
-const dspName = "tuono";
+const dspName = "torpedo";
 const instance = new FaustWasm2ScriptProcessor(dspName);
 
 // output to window or npm package module
@@ -24,8 +23,7 @@ if (typeof module === "undefined") {
     module.exports = exp;
 }
 
-// The name should be the same as the WASM file, so change tuono with brass if you use brass.wasm
-tuono.createDSP(audioContext, 1024)
+torpedo.createDSP(audioContext, 1024)
     .then(node => {
         dspNode = node;
         dspNode.connect(audioContext.destination);
@@ -55,7 +53,34 @@ function accelerationChange(accx, accy, accz) {
     // playAudio()
 }
 
+let wasPointingUp = false;
+let lastLaunchTime = -Infinity;
+const launchCooldownMs = 800;
+
 function rotationChange(rotx, roty, rotz) {
+    if (!Number.isFinite(rotx) || !Number.isFinite(roty)) {
+        return;
+    }
+
+    // Keep the pose armed until the DSP has been enabled by the user.
+    if (!dspNode || audioContext.state === 'suspended') {
+        wasPointingUp = false;
+        return;
+    }
+
+    // Portrait and nearly vertical: the phone's top edge points upwards.
+    const isPointingUp = Math.abs(Math.abs(rotx) - 90) <= 25 && Math.abs(roty) <= 30;
+    const now = millis();
+
+    // Fire once when entering the upright pose. Lowering the phone re-arms it.
+    if (isPointingUp && !wasPointingUp && now - lastLaunchTime >= launchCooldownMs) {
+        lastLaunchTime = now;
+        turntimer = now;
+        statusLabels[1].style("color", "pink");
+        playAudio();
+    }
+
+    wasPointingUp = isPointingUp;
 }
 
 function mousePressed() {
@@ -74,7 +99,6 @@ function deviceTurned() {
 function deviceShaken() {
     shaketimer = millis();
     statusLabels[0].style("color", "pink");
-    playAudio();
 }
 
 function getMinMaxParam(address) {
@@ -102,12 +126,9 @@ function playAudio() {
     if (audioContext.state === 'suspended') {
         return;
     }
-    // Edit here the addresses ("/thunder/rumble") depending on your WASM controls (you can see 
-    // them printed on the console of your browser when you load the page)
-    // For example if you change to a bell sound, here you could use "/churchBell/gate" instead of
-    // "/thunder/rumble".
-    dspNode.setParamValue("/thunder/rumble", 1)
-    setTimeout(() => { dspNode.setParamValue("/thunder/rumble", 0) }, 100);
+
+    dspNode.setParamValue("/torpedo/trigger", 1);
+    setTimeout(() => { dspNode.setParamValue("/torpedo/trigger", 0); }, 100);
 }
 
 //==========================================================================================

@@ -11,8 +11,7 @@ let dspNode = null;
 let dspNodeParams = null;
 let jsonParams = null;
 
-// Change here to ("tuono") depending on your wasm file name
-const dspName = "bells";
+const dspName = "engine";
 const instance = new FaustWasm2ScriptProcessor(dspName);
 
 // output to window or npm package module
@@ -24,8 +23,7 @@ if (typeof module === "undefined") {
     module.exports = exp;
 }
 
-// The name should be the same as the WASM file, so change tuono with brass if you use brass.wasm
-bells.createDSP(audioContext, 1024)
+engine.createDSP(audioContext, 1024)
     .then(node => {
         dspNode = node;
         dspNode.connect(audioContext.destination);
@@ -33,6 +31,9 @@ bells.createDSP(audioContext, 1024)
         const jsonString = dspNode.getJSON();
         jsonParams = JSON.parse(jsonString)["ui"][0]["items"];
         dspNodeParams = jsonParams
+        // A short ramp makes the engine react quickly to changes in spin speed.
+        dspNode.setParamValue("/engine/runtime", 0.15);
+        dspNode.setParamValue("/engine/volume", 1);
         // const exampleMinMaxParam = findByAddress(dspNodeParams, "/thunder/rumble");
         // // ALWAYS PAY ATTENTION TO MIN AND MAX, ELSE YOU MAY GET REALLY HIGH VOLUMES FROM YOUR SPEAKERS
         // const [exampleMinValue, exampleMaxValue] = getParamMinMax(exampleMinMaxParam);
@@ -55,11 +56,72 @@ function accelerationChange(accx, accy, accz) {
     // playAudio()
 }
 
+let previousRotationZ = null;
+let previousRotationTime = null;
+let smoothedSpinSpeed = 0;
+let manualEngineUntil = 0;
+
+const flatAngleLimit = 20;
+const spinDeadZone = 15;
+const fullSpeedAt = 240;
+
 function rotationChange(rotx, roty, rotz) {
+    if (!Number.isFinite(rotx) || !Number.isFinite(roty) || !Number.isFinite(rotz)) {
+        return;
+    }
+
+    const now = millis();
+    if (now < manualEngineUntil) {
+        return;
+    }
+
+    const isFlat = Math.abs(rotx) <= flatAngleLimit && Math.abs(roty) <= flatAngleLimit;
+
+    if (!isFlat) {
+        previousRotationZ = null;
+        previousRotationTime = null;
+        smoothedSpinSpeed = 0;
+        playAudio(0);
+        return;
+    }
+
+    if (previousRotationZ === null || previousRotationTime === null) {
+        previousRotationZ = rotz;
+        previousRotationTime = now;
+        playAudio(0);
+        return;
+    }
+
+    const elapsedSeconds = (now - previousRotationTime) / 1000;
+    if (elapsedSeconds <= 0) {
+        return;
+    }
+
+    // Use the shortest angular distance so crossing 359 -> 0 degrees stays smooth.
+    const angleDelta = ((rotz - previousRotationZ + 540) % 360) - 180;
+    const spinSpeed = Math.min(Math.abs(angleDelta) / elapsedSeconds, 720);
+    smoothedSpinSpeed = 0.75 * smoothedSpinSpeed + 0.25 * spinSpeed;
+
+    const activity = constrain(
+        (smoothedSpinSpeed - spinDeadZone) / (fullSpeedAt - spinDeadZone),
+        0,
+        1
+    );
+
+    if (activity > 0) {
+        turntimer = now;
+        statusLabels[1].style("color", "pink");
+    }
+
+    playAudio(activity);
+    previousRotationZ = rotz;
+    previousRotationTime = now;
 }
 
 function mousePressed() {
-    playAudio()
+    manualEngineUntil = millis() + 2000;
+    playAudio(0.7);
+    setTimeout(() => playAudio(0), 2000);
     // Use this for debugging from the desktop!
 }
 
@@ -70,9 +132,6 @@ function deviceMoved() {
 
 function deviceTurned() {
     threshVals[1] = turnAxis;
-    turntimer = millis();
-    statusLabels[1].style("color", "pink");
-    playAudio();
 }
 function deviceShaken() {
     shaketimer = millis();
@@ -97,15 +156,18 @@ function getMinMaxParam(address) {
 //
 //==========================================================================================
 
-function playAudio() {
+function playAudio(activity) {
     if (!dspNode) {
         return;
     }
     if (audioContext.state === 'suspended') {
         return;
     }
-    dspNode.setParamValue("/englishBell/gate", 1)
-    setTimeout(() => { dspNode.setParamValue("/englishBell/gate", 0) }, 100);
+    const safeActivity = constrain(Number(activity) || 0, 0, 1);
+    const motorSpeed = safeActivity > 0 ? 0.15 + 0.85 * safeActivity : 0;
+
+    dspNode.setParamValue("/engine/maxSpeed", motorSpeed);
+    dspNode.setParamValue("/engine/gate", safeActivity > 0 ? 1 : 0);
 }
 
 //==========================================================================================
