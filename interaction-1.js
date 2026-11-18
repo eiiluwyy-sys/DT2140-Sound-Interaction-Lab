@@ -49,43 +49,71 @@ torpedo.createDSP(audioContext, 1024)
 //
 //==========================================================================================
 
-function accelerationChange(accx, accy, accz) {
-    // playAudio()
-}
-
-let wasPointingUp = false;
+let isLaunchOrientation = false;
+let launchArmed = false;
+let launchSettleStart = null;
 let lastLaunchTime = -Infinity;
+
+const upwardAccelerationThreshold = 5;
+const settleAccelerationLimit = 1.5;
+const launchSettleMs = 300;
 const launchCooldownMs = 800;
+
+function accelerationChange(accx, accy, accz) {
+    if (!Number.isFinite(accx) || !Number.isFinite(accy) || !Number.isFinite(accz)) {
+        return;
+    }
+
+    const now = millis();
+    const dspIsRunning = dspNode && audioContext.state === 'running';
+
+    // Opening the DSP or entering the launch pose never fires by itself.
+    // The phone must first be steady before a new upward gesture is armed.
+    if (!dspIsRunning || !isLaunchOrientation) {
+        launchArmed = false;
+        launchSettleStart = null;
+        return;
+    }
+
+    const accelerationMagnitude = Math.hypot(accx, accy, accz);
+
+    if (!launchArmed) {
+        if (accelerationMagnitude <= settleAccelerationLimit) {
+            if (launchSettleStart === null) {
+                launchSettleStart = now;
+            } else if (now - launchSettleStart >= launchSettleMs) {
+                launchArmed = true;
+            }
+        } else {
+            launchSettleStart = null;
+        }
+        return;
+    }
+
+    // Device +Y points towards the top edge of a portrait phone.
+    if (accy >= upwardAccelerationThreshold
+        && now - lastLaunchTime >= launchCooldownMs) {
+        lastLaunchTime = now;
+        launchArmed = false;
+        launchSettleStart = null;
+        movetimer = now;
+        statusLabels[2].style("color", "pink");
+        playAudio();
+    }
+}
 
 function rotationChange(rotx, roty, rotz) {
     if (!Number.isFinite(rotx) || !Number.isFinite(roty)) {
+        isLaunchOrientation = false;
         return;
     }
 
-    // Keep the pose armed until the DSP has been enabled by the user.
-    if (!dspNode || audioContext.state === 'suspended') {
-        wasPointingUp = false;
-        return;
-    }
-
-    // Portrait and nearly vertical: the phone's top edge points upwards.
-    const isPointingUp = Math.abs(Math.abs(rotx) - 90) <= 25 && Math.abs(roty) <= 30;
-    const now = millis();
-
-    // Fire once when entering the upright pose. Lowering the phone re-arms it.
-    if (isPointingUp && !wasPointingUp && now - lastLaunchTime >= launchCooldownMs) {
-        lastLaunchTime = now;
-        turntimer = now;
-        statusLabels[1].style("color", "pink");
-        playAudio();
-    }
-
-    wasPointingUp = isPointingUp;
+    // Rotation only validates the launch pose; it does not trigger sound.
+    isLaunchOrientation = Math.abs(rotx - 90) <= 25 && Math.abs(roty) <= 30;
 }
 
 function mousePressed() {
-    playAudio()
-    // Use this for debugging from the desktop!
+    // Intentionally empty: clicking Turn On DSP must not launch a torpedo.
 }
 
 function deviceMoved() {
