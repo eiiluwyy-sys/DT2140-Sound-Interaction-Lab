@@ -54,7 +54,7 @@ let launchArmed = false;
 let launchSettleStart = null;
 let lastLaunchTime = -Infinity;
 
-const upwardAccelerationThreshold = 5;
+const upwardAccelerationThreshold = 3;
 const settleAccelerationLimit = 1.5;
 const launchSettleMs = 300;
 const launchCooldownMs = 800;
